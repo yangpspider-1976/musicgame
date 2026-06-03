@@ -1,0 +1,7 @@
+This directory is for demo audio files.
+
+To test the game:
+1. Download a short MP3/WAV audio clip you have rights to use
+2. Place it here and load it via the "Upload Audio File" option
+
+The app supports MP3, WAV, and M4A formats.

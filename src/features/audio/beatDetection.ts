@@ -56,7 +56,7 @@ export function movingAverage(arr: Float32Array, windowSize: number): Float32Arr
  */
 export function computeEnergyEnvelope(
   samples: Float32Array,
-  sampleRate: number,
+  _sampleRate: number,
   hopSize = 512,
 ): Float32Array {
   const frameCount = Math.floor((samples.length - hopSize) / hopSize)
