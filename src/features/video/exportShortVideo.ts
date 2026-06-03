@@ -69,11 +69,11 @@ export async function exportShortVideo(options: ExportOptions): Promise<Blob> {
 
   return new Promise((resolve) => {
     recorder.onstop = () => {
+      stream.getTracks().forEach((t) => t.stop())
       const blob = new Blob(chunks, { type: mimeType })
       resolve(blob)
     }
     recorder.stop()
-    stream.getTracks().forEach((t) => t.stop())
   })
 }
 

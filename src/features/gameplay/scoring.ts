@@ -1,8 +1,8 @@
 import type { GestureResult, LetterGrade, PlaySession, TimingGrade } from '../../types'
 
 export const BASE_SCORE = 1000
-export const PERFECT_WINDOW_MS = 200
-export const GOOD_WINDOW_MS = 400
+export const PERFECT_WINDOW_MS = 300
+export const GOOD_WINDOW_MS = 600
 
 export function getTimingGrade(offsetMs: number): TimingGrade {
   const abs = Math.abs(offsetMs)

@@ -200,7 +200,7 @@ export class GameEngine {
     const result = evaluateGesture(prompt.gestureId, frame, prevFrames)
 
     if (result.detected) {
-      const offsetMs = (frame.timestamp / 1000 - prompt.startTime) * 1000
+      const offsetMs = (this.state.currentTime - prompt.startTime) * 1000
       const timingGrade = getTimingGrade(offsetMs)
       this.recordResult(prompt, timingGrade, result.accuracy, offsetMs)
     }

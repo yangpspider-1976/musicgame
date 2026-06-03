@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useState } from 'react'
 import { exportShortVideo, downloadBlob } from '../features/video/exportShortVideo'
 import type { Challenge, PlaySession } from '../types'
 
@@ -9,7 +9,6 @@ interface Props {
 }
 
 export function VideoExporter({ session, challenge, onClose }: Props) {
-  const videoRef = useRef<HTMLVideoElement>(null)
   const [status, setStatus] = useState<'idle' | 'exporting' | 'done' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
@@ -19,11 +18,11 @@ export function VideoExporter({ session, challenge, onClose }: Props) {
     setStatus('exporting')
     setProgress(0)
     try {
+      const segmentDurationMs = (challenge.segmentEnd - challenge.segmentStart) * 1000
       const blob = await exportShortVideo({
         session,
         challenge,
-        cameraVideoElement: videoRef.current ?? undefined,
-        durationMs: 8000,
+        durationMs: Math.max(3000, segmentDurationMs),
         onProgress: (p) => setProgress(p),
       })
       const url = URL.createObjectURL(blob)
