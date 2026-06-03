@@ -103,37 +103,21 @@ export function GameplayScreen() {
     }
   }, [activeChallenge, syncSettings, setLastSession, setScreen])
 
-  // Audio playback for local files
+  // Audio element ref (rendered in JSX for browser autoplay policy)
   const audioRef = useRef<HTMLAudioElement | null>(null)
+
+  // Start/stop audio based on game phase
   useEffect(() => {
-    if (activeChallenge?.source.type !== 'local_upload') return
-
-    const audio = new Audio(activeChallenge.source.objectUrl)
-    audio.currentTime = activeChallenge.segmentStart ?? 0
-    audio.volume = 1.0
-    audioRef.current = audio
-
-    let played = false
-    const unsub = gameEngine.subscribe((state) => {
-      if (state.phase === 'playing' && !played) {
-        played = true
-        audio.currentTime = activeChallenge.segmentStart ?? 0
-        audio.play().catch((err) => {
-          console.warn('Audio play failed:', err)
-        })
-      }
-      if (state.phase === 'finished' || state.phase === 'idle') {
-        audio.pause()
-      }
-    })
-
-    return () => {
-      unsub()
-      audio.pause()
-      audio.src = ''
-      audioRef.current = null
+    if (gameState.phase === 'playing') {
+      const audio = audioRef.current
+      if (!audio) return
+      audio.currentTime = activeChallenge?.segmentStart ?? 0
+      audio.play().catch((err) => console.warn('Audio play failed:', err))
     }
-  }, [activeChallenge])
+    if (gameState.phase === 'finished' || gameState.phase === 'idle') {
+      audioRef.current?.pause()
+    }
+  }, [gameState.phase, activeChallenge])
 
   const totalPrompts = activeChallenge?.prompts.length ?? 0
   const completedPrompts = gameState.results.length
@@ -141,6 +125,15 @@ export function GameplayScreen() {
 
   return (
     <div className="screen relative overflow-hidden">
+      {/* Audio element for local uploads */}
+      {activeChallenge?.source.type === 'local_upload' && (
+        <audio
+          ref={audioRef}
+          src={activeChallenge.source.objectUrl}
+          preload="auto"
+        />
+      )}
+
       {/* Camera feed - full background */}
       <div className="absolute inset-0">
         <video

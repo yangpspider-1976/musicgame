@@ -51,12 +51,15 @@ function drawFigure(
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
+  // mx() mirrors x to match the CSS-mirrored camera video
+  const mx = (x: number) => (1 - x) * w
+
   for (const [a, b] of CONNECTIONS) {
     const pa = pose[a]
     const pb = pose[b]
     ctx.beginPath()
-    ctx.moveTo(pa[0] * w, pa[1] * h)
-    ctx.lineTo(pb[0] * w, pb[1] * h)
+    ctx.moveTo(mx(pa[0]), pa[1] * h)
+    ctx.lineTo(mx(pb[0]), pb[1] * h)
     ctx.stroke()
   }
 
@@ -65,7 +68,7 @@ function drawFigure(
   const midShoulderY = (pose.leftShoulder[1] + pose.rightShoulder[1]) / 2
   const headCenterY = (ny + midShoulderY) / 2
   ctx.beginPath()
-  ctx.arc(nx * w, headCenterY * h, headRadius, 0, Math.PI * 2)
+  ctx.arc(mx(nx), headCenterY * h, headRadius, 0, Math.PI * 2)
   ctx.fillStyle = color
   ctx.fill()
 
@@ -80,7 +83,7 @@ function drawFigure(
   for (const key of joints) {
     const [x, y] = pose[key]
     ctx.beginPath()
-    ctx.arc(x * w, y * h, dotRadius, 0, Math.PI * 2)
+    ctx.arc(mx(x), y * h, dotRadius, 0, Math.PI * 2)
     ctx.fill()
   }
 
@@ -226,7 +229,7 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
   return (
     <canvas
       ref={canvasRef}
-      className={`absolute inset-0 w-full h-full pointer-events-none scale-x-[-1] ${className}`}
+      className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
     />
   )
 }
