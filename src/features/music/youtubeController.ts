@@ -5,20 +5,21 @@ const YT_PLAYING = 1
 
 export class YouTubeAudioController implements PlayableMusicController {
   sourceType = 'youtube_link' as const
+  /** Set only after onReady fires — the constructor return is a partial object */
   private player: YTPlayerMin | null = null
   private _ready = false
-  private _containerEl: HTMLElement | null = null
 
   constructor(private videoId: string) {}
 
   async mount(container: HTMLElement): Promise<void> {
-    this._containerEl = container
     await loadYouTubeAPI()
     return new Promise((resolve, reject) => {
       const div = document.createElement('div')
       container.appendChild(div)
 
-      this.player = new window.YT.Player(div as unknown as string, {
+      // Do NOT assign this.player here — the constructor return is not ready.
+      // Grab the fully-initialized instance from event.target inside onReady.
+      new window.YT.Player(div as unknown as string, {
         videoId: this.videoId,
         width: '100%',
         height: '100%',
@@ -32,7 +33,12 @@ export class YouTubeAudioController implements PlayableMusicController {
           origin: window.location.origin,
         },
         events: {
-          onReady: () => { this._ready = true; resolve() },
+          onReady: (event: { target: YTPlayerMin }) => {
+            // event.target is the fully-initialized player instance
+            this.player = event.target
+            this._ready = true
+            resolve()
+          },
           onError: (e: { data: number }) => reject(new Error(`YouTube player error: ${e.data}`)),
         },
       })
@@ -42,33 +48,38 @@ export class YouTubeAudioController implements PlayableMusicController {
   async load(): Promise<void> { /* loading happens via mount() */ }
 
   async play(): Promise<void> {
-    if (!this.player) throw new Error('YouTube player not mounted')
-    this.player.unMute()
-    this.player.setVolume(100)
-    this.player.playVideo()
+    if (!this._ready || !this.player) throw new Error('YouTube player not ready')
+    this.safeCall('unMute')
+    this.safeCall('setVolume', 100)
+    this.safeCall('playVideo')
   }
 
-  pause(): void { this.player?.pauseVideo() }
-  stop(): void { this.player?.stopVideo() }
+  pause(): void { this.safeCall('pauseVideo') }
+  stop(): void { this.safeCall('stopVideo') }
+  seekTo(seconds: number): void { this.safeCall('seekTo', seconds, true) }
 
-  seekTo(seconds: number): void { this.player?.seekTo(seconds, true) }
-
-  getCurrentTime(): number { return this.player?.getCurrentTime() ?? 0 }
-  getDuration(): number { return this.player?.getDuration() ?? 0 }
-
+  getCurrentTime(): number {
+    return this._ready ? (this.player?.getCurrentTime() ?? 0) : 0
+  }
+  getDuration(): number {
+    return this._ready ? (this.player?.getDuration() ?? 0) : 0
+  }
   setVolume(v: number): void {
-    this.player?.setVolume(Math.round(Math.max(0, Math.min(1, v)) * 100))
+    this.safeCall('setVolume', Math.round(Math.max(0, Math.min(1, v)) * 100))
   }
-
-  unmute(): void { this.player?.unMute() }
+  unmute(): void { this.safeCall('unMute') }
 
   isPlaying(): boolean {
-    return this.player?.getPlayerState() === YT_PLAYING
+    if (!this._ready || !this.player) return false
+    return this.player.getPlayerState() === YT_PLAYING
   }
 
   isReady(): boolean { return this._ready }
 
-  getPlayerState(): number { return this.player?.getPlayerState() ?? -1 }
+  getPlayerState(): number {
+    if (!this._ready || !this.player) return -1
+    return this.player.getPlayerState()
+  }
 
   async waitForPlayingState(timeoutMs: number): Promise<boolean> {
     const deadline = Date.now() + timeoutMs
@@ -80,9 +91,20 @@ export class YouTubeAudioController implements PlayableMusicController {
   }
 
   destroy(): void {
-    this.player?.destroy()
+    if (this._ready && this.player) {
+      this.safeCall('destroy')
+    }
     this.player = null
     this._ready = false
+  }
+
+  /** Call a player method only if ready and the method exists */
+  private safeCall(method: string, ...args: unknown[]): void {
+    if (!this.player) return
+    const fn = (this.player as Record<string, unknown>)[method]
+    if (typeof fn === 'function') {
+      (fn as (...a: unknown[]) => void).apply(this.player, args)
+    }
   }
 }
 
