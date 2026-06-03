@@ -106,24 +106,32 @@ export function GameplayScreen() {
   // Audio playback for local files
   const audioRef = useRef<HTMLAudioElement | null>(null)
   useEffect(() => {
-    if (activeChallenge?.source.type === 'local_upload') {
-      const audio = new Audio(activeChallenge.source.objectUrl)
-      audioRef.current = audio
-      audio.currentTime = activeChallenge.segmentStart
+    if (activeChallenge?.source.type !== 'local_upload') return
 
-      // Start audio when gameplay starts
-      const checkStart = setInterval(() => {
-        if (gameEngine.getState().phase === 'playing') {
-          audio.play().catch(() => {})
-          clearInterval(checkStart)
-        }
-      }, 100)
+    const audio = new Audio(activeChallenge.source.objectUrl)
+    audio.currentTime = activeChallenge.segmentStart ?? 0
+    audio.volume = 1.0
+    audioRef.current = audio
 
-      return () => {
-        clearInterval(checkStart)
-        audio.pause()
-        audio.src = ''
+    let played = false
+    const unsub = gameEngine.subscribe((state) => {
+      if (state.phase === 'playing' && !played) {
+        played = true
+        audio.currentTime = activeChallenge.segmentStart ?? 0
+        audio.play().catch((err) => {
+          console.warn('Audio play failed:', err)
+        })
       }
+      if (state.phase === 'finished' || state.phase === 'idle') {
+        audio.pause()
+      }
+    })
+
+    return () => {
+      unsub()
+      audio.pause()
+      audio.src = ''
+      audioRef.current = null
     }
   }, [activeChallenge])
 

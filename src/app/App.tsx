@@ -44,8 +44,10 @@ export function App() {
     }
   }
 
+  const isFullscreen = screen === 'GAMEPLAY'
+
   return (
-    <div className="min-h-dvh bg-dark-900 max-w-md mx-auto relative">
+    <div className={`min-h-dvh bg-dark-900 relative ${isFullscreen ? 'w-full' : 'max-w-md mx-auto'}`}>
       {renderScreen()}
 
       {showExporter && lastSession && activeChallenge && (
