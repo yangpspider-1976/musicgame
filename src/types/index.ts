@@ -81,6 +81,10 @@ export interface GestureDefinition {
   evaluate: (frame: PoseFrame, prevFrames?: PoseFrame[]) => boolean
 }
 
+export type GestureGenerationMode = 'BEAT_BASED' | 'MUSIC_STYLE' | 'LYRIC_MEANING' | 'CREATOR_RECORDING'
+
+export type MusicStyleProfile = 'KPOP' | 'HIPHOP' | 'EDM' | 'BALLAD' | 'FREESTYLE'
+
 export interface GesturePrompt {
   id: string
   gestureId: GestureId
@@ -88,6 +92,7 @@ export interface GesturePrompt {
   startTime: number   // seconds
   endTime: number     // seconds
   windowMs: number    // detection window in ms
+  sourceMode?: GestureGenerationMode
 }
 
 // ─── Gameplay ────────────────────────────────────────────────────────────────
@@ -130,6 +135,8 @@ export interface Challenge {
   segmentEnd: number    // seconds
   createdAt: number
   bpmOverride?: number
+  generationMode?: GestureGenerationMode
+  styleProfile?: MusicStyleProfile
 }
 
 // ─── Ranking ─────────────────────────────────────────────────────────────────

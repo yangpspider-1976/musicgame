@@ -4,6 +4,7 @@ import { gameEngine, type GameState } from '../features/gameplay/gameEngine'
 import { poseDetector } from '../features/pose/poseDetector'
 import { PoseDetector } from '../features/pose/poseDetector'
 import { buildSession } from '../features/gameplay/scoring'
+import { LocalAudioController } from '../features/music/musicController'
 import { GameplayHUD } from './GameplayHUD'
 import { GestureOverlay } from './GestureOverlay'
 import { evaluateGesture } from '../features/gestures/evaluateGesture'
@@ -25,6 +26,15 @@ export function GameplayScreen() {
     }
 
     gameEngine.loadChallenge(activeChallenge, syncSettings)
+
+    // Set up music controller for local uploads
+    let musicController: LocalAudioController | null = null
+    if (activeChallenge.source.type === 'local_upload' && activeChallenge.source.objectUrl) {
+      musicController = new LocalAudioController(activeChallenge.source.objectUrl)
+      // Load async; if ready before countdown ends, engine will use it
+      musicController.load().catch((e) => console.warn('Audio load failed:', e))
+      gameEngine.setMusicController(musicController)
+    }
 
     const unsub = gameEngine.subscribe((state) => {
       setGameState(state)
@@ -80,9 +90,9 @@ export function GameplayScreen() {
           const stream = await navigator.mediaDevices.getUserMedia({
             video: {
               facingMode: 'user',
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              aspectRatio: { ideal: 16 / 9 },
+              width: { ideal: 720 },
+              height: { ideal: 1280 },
+              frameRate: { ideal: 30, max: 30 },
             },
           })
           if (video) {
@@ -100,48 +110,9 @@ export function GameplayScreen() {
       unsub()
       gameEngine.stop()
       poseDetector.stop()
+      musicController?.destroy?.()
     }
   }, [activeChallenge, syncSettings, setLastSession, setScreen])
-
-  // Audio: create once, play via gameEngine subscription (no React render cycle dependency)
-  const audioRef = useRef<HTMLAudioElement | null>(null)
-  useEffect(() => {
-    if (activeChallenge?.source.type !== 'local_upload') return
-    if (!activeChallenge.source.objectUrl) return
-
-    const audio = new Audio()
-    audio.src = activeChallenge.source.objectUrl
-    audio.preload = 'auto'
-    audio.volume = 1.0
-    audioRef.current = audio
-
-    let started = false
-    const unsub = gameEngine.subscribe((state) => {
-      if (state.phase === 'playing' && !started) {
-        started = true
-        audio.currentTime = activeChallenge.segmentStart ?? 0
-        const promise = audio.play()
-        if (promise !== undefined) {
-          promise.catch(() => {
-            // Retry once after short delay (some browsers need this)
-            setTimeout(() => {
-              audio.play().catch((e) => console.warn('audio play failed:', e))
-            }, 100)
-          })
-        }
-      }
-      if ((state.phase === 'finished' || state.phase === 'idle') && started) {
-        audio.pause()
-      }
-    })
-
-    return () => {
-      unsub()
-      audio.pause()
-      audio.src = ''
-      audioRef.current = null
-    }
-  }, [activeChallenge])
 
   const totalPrompts = activeChallenge?.prompts.length ?? 0
   const completedPrompts = gameState.results.length

@@ -7,6 +7,7 @@ import type {
   SyncSettings,
   TimingGrade,
 } from '../../types'
+import type { PlayableMusicController } from '../music/musicController'
 import { evaluateGesture } from '../gestures/evaluateGesture'
 import {
   calculateGestureScore,
@@ -40,6 +41,7 @@ export class GameEngine {
   private animFrameId: number | null = null
   private startWallTime: number | null = null
   private segmentStartSec = 0
+  private musicController: PlayableMusicController | null = null
 
   private state: GameState = {
     phase: 'idle',
@@ -69,6 +71,10 @@ export class GameEngine {
 
   private emit(): void {
     for (const l of this.listeners) l({ ...this.state })
+  }
+
+  setMusicController(controller: PlayableMusicController): void {
+    this.musicController = controller
   }
 
   loadChallenge(challenge: Challenge, sync?: SyncSettings): void {
@@ -120,16 +126,32 @@ export class GameEngine {
     this.state.phase = 'playing'
     this.startWallTime = performance.now()
     this.emit()
+
+    // Start music via controller if available
+    if (this.musicController && this.musicController.isReady()) {
+      this.musicController.seekTo(this.segmentStartSec)
+      const playPromise = this.musicController.play()
+      if (playPromise instanceof Promise) {
+        playPromise.catch((e) => console.warn('musicController play failed:', e))
+      }
+    }
+
     this.tick()
   }
 
   private tick(): void {
     if (this.state.phase !== 'playing') return
 
-    const now = performance.now()
-    const elapsed = (now - (this.startWallTime ?? now)) / 1000
-    const offsetSec = this.syncSettings.offsetMs / 1000
-    const currentTime = this.segmentStartSec + elapsed + offsetSec
+    let currentTime: number
+    if (this.musicController && this.musicController.isReady()) {
+      // Use music time as source of truth
+      currentTime = this.musicController.getCurrentTime() + this.syncSettings.offsetMs / 1000
+    } else {
+      // Fallback to wall clock
+      const now = performance.now()
+      const elapsed = (now - (this.startWallTime ?? now)) / 1000
+      currentTime = this.segmentStartSec + elapsed + this.syncSettings.offsetMs / 1000
+    }
 
     this.state.currentTime = currentTime
 
@@ -234,6 +256,7 @@ export class GameEngine {
       cancelAnimationFrame(this.animFrameId)
       this.animFrameId = null
     }
+    this.musicController?.pause()
     this.state.phase = 'finished'
     this.emit()
   }
@@ -243,6 +266,7 @@ export class GameEngine {
       cancelAnimationFrame(this.animFrameId)
       this.animFrameId = null
     }
+    this.musicController?.pause()
     this.state.phase = 'idle'
     this.emit()
   }
