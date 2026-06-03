@@ -1,18 +1,29 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { exportShortVideo, downloadBlob } from '../features/video/exportShortVideo'
 import type { Challenge, PlaySession } from '../types'
 
 interface Props {
   session: PlaySession
   challenge: Challenge
+  /** Pre-recorded gameplay blob from GameplayScreen (preferred over post-game render) */
+  recordedBlob?: Blob | null
   onClose: () => void
 }
 
-export function VideoExporter({ session, challenge, onClose }: Props) {
+export function VideoExporter({ session, challenge, recordedBlob, onClose }: Props) {
   const [status, setStatus] = useState<'idle' | 'exporting' | 'done' | 'error'>('idle')
   const [progress, setProgress] = useState(0)
   const [blobUrl, setBlobUrl] = useState<string | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+
+  // If we already have a recorded blob, surface it immediately
+  useEffect(() => {
+    if (recordedBlob && recordedBlob.size > 0) {
+      const url = URL.createObjectURL(recordedBlob)
+      setBlobUrl(url)
+      setStatus('done')
+    }
+  }, [recordedBlob])
 
   const handleExport = async () => {
     setStatus('exporting')
@@ -38,16 +49,14 @@ export function VideoExporter({ session, challenge, onClose }: Props) {
     if (!blobUrl) return
     const timestamp = new Date().toISOString().slice(0, 10)
     const safeTitle = challenge.title.replace(/[^a-z0-9]/gi, '_').slice(0, 30)
-    downloadBlob(
-      new Blob([]),  // We re-fetch from blobUrl
-      `rhythm_${safeTitle}_${session.grade}_${timestamp}.webm`,
-    )
-    // Actually navigate to the blob URL for download
+    const ext = blobUrl.includes('mp4') ? 'mp4' : 'webm'
     const a = document.createElement('a')
     a.href = blobUrl
-    a.download = `rhythm_${safeTitle}_${session.grade}_${timestamp}.webm`
+    a.download = `rhythm_${safeTitle}_${session.grade}_${timestamp}.${ext}`
     a.click()
   }
+
+  const hasRecordedBlob = !!recordedBlob && recordedBlob.size > 0
 
   return (
     <div className="fixed inset-0 bg-black/80 flex items-end justify-center z-50">
@@ -58,10 +67,12 @@ export function VideoExporter({ session, challenge, onClose }: Props) {
         </div>
 
         <div className="text-center text-slate-400 text-sm">
-          Creates a 9:16 vertical video (720×1280) with your score and camera feed
+          {hasRecordedBlob
+            ? 'Gameplay recording ready — includes camera feed and overlays'
+            : 'Creates a 9:16 vertical result card (720×1280)'}
         </div>
 
-        {status === 'idle' && (
+        {status === 'idle' && !hasRecordedBlob && (
           <button onClick={handleExport} className="btn-cyan w-full py-4 text-lg">
             🎬 Generate Video
           </button>
@@ -87,17 +98,30 @@ export function VideoExporter({ session, challenge, onClose }: Props) {
               src={blobUrl}
               controls
               playsInline
-              className="w-full rounded-xl max-h-64 bg-black"
+              className="w-full rounded-xl max-h-72 bg-black"
             />
             <button onClick={handleDownload} className="btn-primary w-full">
               ⬇️ Download
             </button>
+            {hasRecordedBlob && (
+              <button
+                onClick={handleExport}
+                className="btn-secondary w-full py-2 text-sm"
+              >
+                🎬 Generate Result Card Instead
+              </button>
+            )}
           </div>
         )}
 
         {status === 'error' && (
-          <div className="bg-red-900/30 border border-red-700 rounded-xl p-3 text-red-400 text-sm text-center">
-            {errorMsg ?? 'Export failed'}
+          <div className="space-y-3">
+            <div className="bg-red-900/30 border border-red-700 rounded-xl p-3 text-red-400 text-sm text-center">
+              {errorMsg ?? 'Export failed'}
+            </div>
+            <button onClick={handleExport} className="btn-secondary w-full">
+              Try Result Card
+            </button>
           </div>
         )}
 
@@ -108,3 +132,6 @@ export function VideoExporter({ session, challenge, onClose }: Props) {
     </div>
   )
 }
+
+// Re-export for consumers that use it directly
+export { downloadBlob }

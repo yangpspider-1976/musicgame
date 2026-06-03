@@ -10,7 +10,7 @@ import { ResultScreen } from '../components/ResultScreen'
 import { VideoExporter } from '../components/VideoExporter'
 
 export function App() {
-  const { screen, setScreen, lastSession, activeChallenge, resetGame } = useGameStore()
+  const { screen, setScreen, lastSession, activeChallenge, recordedVideoBlob, resetGame } = useGameStore()
   const [showExporter, setShowExporter] = useState(false)
 
   const renderScreen = () => {
@@ -54,6 +54,7 @@ export function App() {
         <VideoExporter
           session={lastSession}
           challenge={activeChallenge}
+          recordedBlob={recordedVideoBlob}
           onClose={() => setShowExporter(false)}
         />
       )}

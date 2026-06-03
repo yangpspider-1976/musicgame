@@ -42,6 +42,10 @@ interface GameStore {
   cameraStream: MediaStream | null
   setCameraStream: (s: MediaStream | null) => void
 
+  // Recorded gameplay video blob (set at end of gameplay)
+  recordedVideoBlob: Blob | null
+  setRecordedVideoBlob: (blob: Blob | null) => void
+
   // Reset entire game state
   resetGame: () => void
 }
@@ -79,6 +83,9 @@ export const useGameStore = create<GameStore>((set) => ({
   cameraStream: null,
   setCameraStream: (cameraStream) => set({ cameraStream }),
 
+  recordedVideoBlob: null,
+  setRecordedVideoBlob: (recordedVideoBlob) => set({ recordedVideoBlob }),
+
   resetGame: () =>
     set({
       screen: 'HOME',
@@ -89,5 +96,6 @@ export const useGameStore = create<GameStore>((set) => ({
       syncSettings: DEFAULT_SYNC,
       difficulty: 'normal',
       cameraStream: null,
+      recordedVideoBlob: null,
     }),
 }))

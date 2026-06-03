@@ -39,6 +39,10 @@ interface YTPlayer {
   getVideoData(): { title: string; author: string; video_id: string }
   destroy(): void
   getPlayerState(): number
+  setVolume(volume: number): void
+  unMute(): void
+  mute(): void
+  isMuted(): boolean
 }
 
 let ytApiLoaded = false

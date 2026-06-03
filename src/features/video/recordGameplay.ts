@@ -35,14 +35,15 @@ export class GameplayRecorder {
         return
       }
 
+      const stream = this.stream
       this.mediaRecorder.onstop = () => {
+        stream?.getTracks().forEach((t) => t.stop())
         const mimeType = this.mediaRecorder?.mimeType ?? 'video/webm'
         const blob = new Blob(this.chunks, { type: mimeType })
         resolve(blob)
       }
 
       this.mediaRecorder.stop()
-      this.stream?.getTracks().forEach((t) => t.stop())
     })
   }
 
