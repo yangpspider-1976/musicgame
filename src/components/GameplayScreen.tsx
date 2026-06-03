@@ -103,21 +103,45 @@ export function GameplayScreen() {
     }
   }, [activeChallenge, syncSettings, setLastSession, setScreen])
 
-  // Audio element ref (rendered in JSX for browser autoplay policy)
+  // Audio: create once, play via gameEngine subscription (no React render cycle dependency)
   const audioRef = useRef<HTMLAudioElement | null>(null)
-
-  // Start/stop audio based on game phase
   useEffect(() => {
-    if (gameState.phase === 'playing') {
-      const audio = audioRef.current
-      if (!audio) return
-      audio.currentTime = activeChallenge?.segmentStart ?? 0
-      audio.play().catch((err) => console.warn('Audio play failed:', err))
+    if (activeChallenge?.source.type !== 'local_upload') return
+    if (!activeChallenge.source.objectUrl) return
+
+    const audio = new Audio()
+    audio.src = activeChallenge.source.objectUrl
+    audio.preload = 'auto'
+    audio.volume = 1.0
+    audioRef.current = audio
+
+    let started = false
+    const unsub = gameEngine.subscribe((state) => {
+      if (state.phase === 'playing' && !started) {
+        started = true
+        audio.currentTime = activeChallenge.segmentStart ?? 0
+        const promise = audio.play()
+        if (promise !== undefined) {
+          promise.catch(() => {
+            // Retry once after short delay (some browsers need this)
+            setTimeout(() => {
+              audio.play().catch((e) => console.warn('audio play failed:', e))
+            }, 100)
+          })
+        }
+      }
+      if ((state.phase === 'finished' || state.phase === 'idle') && started) {
+        audio.pause()
+      }
+    })
+
+    return () => {
+      unsub()
+      audio.pause()
+      audio.src = ''
+      audioRef.current = null
     }
-    if (gameState.phase === 'finished' || gameState.phase === 'idle') {
-      audioRef.current?.pause()
-    }
-  }, [gameState.phase, activeChallenge])
+  }, [activeChallenge])
 
   const totalPrompts = activeChallenge?.prompts.length ?? 0
   const completedPrompts = gameState.results.length
@@ -125,15 +149,6 @@ export function GameplayScreen() {
 
   return (
     <div className="screen relative overflow-hidden">
-      {/* Audio element for local uploads */}
-      {activeChallenge?.source.type === 'local_upload' && (
-        <audio
-          ref={audioRef}
-          src={activeChallenge.source.objectUrl}
-          preload="auto"
-        />
-      )}
-
       {/* Camera feed - full background */}
       <div className="absolute inset-0">
         <video

@@ -6,7 +6,6 @@ interface Props {
   gestureId: string | null
   nextGestureId?: string | null
   detected: boolean
-  /** Canvas width & height match the camera feed container */
   className?: string
 }
 
@@ -21,6 +20,12 @@ const CONNECTIONS: Array<[keyof PoseLandmarks, keyof PoseLandmarks]> = [
   ['leftHip',       'rightHip'],
 ]
 
+/**
+ * Draw a stick figure.
+ * The canvas has CSS scale-x-[-1] applied, so x coordinates are already mirrored.
+ * We draw at x * w (raw image coords), CSS flip handles the mirror display.
+ * For text we manually unflip inside this function.
+ */
 function drawFigure(
   ctx: CanvasRenderingContext2D,
   pose: PoseLandmarks,
@@ -45,30 +50,26 @@ function drawFigure(
     ctx.shadowColor = glowColor
   }
 
-  // Connections
   ctx.strokeStyle = color
   ctx.lineWidth = lineWidth
   ctx.lineCap = 'round'
   ctx.lineJoin = 'round'
 
-  // mx() mirrors x to match the CSS-mirrored camera video
-  const mx = (x: number) => (1 - x) * w
-
   for (const [a, b] of CONNECTIONS) {
     const pa = pose[a]
     const pb = pose[b]
     ctx.beginPath()
-    ctx.moveTo(mx(pa[0]), pa[1] * h)
-    ctx.lineTo(mx(pb[0]), pb[1] * h)
+    ctx.moveTo(pa[0] * w, pa[1] * h)
+    ctx.lineTo(pb[0] * w, pb[1] * h)
     ctx.stroke()
   }
 
-  // Head circle
+  // Head
   const [nx, ny] = pose.nose
   const midShoulderY = (pose.leftShoulder[1] + pose.rightShoulder[1]) / 2
   const headCenterY = (ny + midShoulderY) / 2
   ctx.beginPath()
-  ctx.arc(mx(nx), headCenterY * h, headRadius, 0, Math.PI * 2)
+  ctx.arc(nx * w, headCenterY * h, headRadius, 0, Math.PI * 2)
   ctx.fillStyle = color
   ctx.fill()
 
@@ -83,10 +84,36 @@ function drawFigure(
   for (const key of joints) {
     const [x, y] = pose[key]
     ctx.beginPath()
-    ctx.arc(mx(x), y * h, dotRadius, 0, Math.PI * 2)
+    ctx.arc(x * w, y * h, dotRadius, 0, Math.PI * 2)
     ctx.fill()
   }
 
+  ctx.restore()
+}
+
+/** Draw text that is readable even though the canvas is CSS scale-x-[-1]. */
+function drawMirroredText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  cx: number,   // center x in canvas coords
+  y: number,
+  font: string,
+  color: string,
+  shadowColor?: string,
+) {
+  ctx.save()
+  // Translate to the center point, flip x, then draw centered text
+  ctx.translate(cx, y)
+  ctx.scale(-1, 1)
+  ctx.font = font
+  ctx.fillStyle = color
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  if (shadowColor) {
+    ctx.shadowBlur = 12
+    ctx.shadowColor = shadowColor
+  }
+  ctx.fillText(text, 0, 0)
   ctx.restore()
 }
 
@@ -107,48 +134,45 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
       const h = canvas.height
       ctx.clearRect(0, 0, w, h)
 
-      // pulse phase (0 → 2π per second)
       phaseRef.current = (ts / 600) % (Math.PI * 2)
       const pulse = 0.5 + 0.5 * Math.sin(phaseRef.current)
 
-      // --- Draw NEXT gesture (ghost, smaller, top-right corner) ---
+      // --- NEXT gesture mini-preview (top-left in canvas = top-right on screen due to CSS flip) ---
       if (nextGestureId && GESTURE_POSES[nextGestureId]) {
         const nextPose = GESTURE_POSES[nextGestureId]
+        const previewW = w * 0.22
+        const previewH = h * 0.28
+        const previewX = w * 0.04   // left side in canvas = right side on screen
+        const previewY = h * 0.02
+
         ctx.save()
-        // Scale down & position in top-right corner
-        const scale = 0.22
-        const offsetX = w * 0.72
-        const offsetY = h * 0.02
+        ctx.translate(previewX, previewY)
+        ctx.scale(previewW / w, previewH / h)
 
-        ctx.translate(offsetX, offsetY)
-        ctx.scale(scale, scale)
-
-        const scaledW = w / scale
-        const scaledH = h / scale
-
-        drawFigure(ctx, nextPose, scaledW, scaledH, {
+        drawFigure(ctx, nextPose, w, h, {
           color: '#94a3b8',
           glowColor: '#94a3b8',
-          alpha: 0.45,
-          lineWidth: 8,
-          headRadius: 22,
-          dotRadius: 10,
+          alpha: 0.5,
+          lineWidth: 6,
+          headRadius: 18,
+          dotRadius: 8,
           glow: false,
         })
 
-        // "NEXT" label
         ctx.restore()
-        ctx.save()
-        ctx.globalAlpha = 0.6
-        ctx.fillStyle = '#94a3b8'
-        ctx.font = `bold ${Math.max(10, w * 0.025)}px sans-serif`
-        ctx.textAlign = 'center'
+
         const def = GESTURE_MAP[nextGestureId]
-        ctx.fillText(`NEXT: ${def?.name ?? nextGestureId}`, w * 0.83, h * 0.265)
-        ctx.restore()
+        drawMirroredText(
+          ctx,
+          `NEXT: ${def?.name ?? nextGestureId}`,
+          w * 0.15,
+          previewY + previewH + 14,
+          `bold ${Math.max(9, w * 0.022)}px sans-serif`,
+          '#94a3b8',
+        )
       }
 
-      // --- Draw CURRENT gesture ---
+      // --- CURRENT gesture ---
       if (!gestureId || !GESTURE_POSES[gestureId]) {
         animRef.current = requestAnimationFrame(render)
         return
@@ -158,7 +182,6 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
       const def = GESTURE_MAP[gestureId]
 
       if (detected) {
-        // Green glow + solid
         drawFigure(ctx, pose, w, h, {
           color: '#4ade80',
           glowColor: '#22c55e',
@@ -169,23 +192,24 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
           glow: true,
         })
 
-        // ✓ badge
+        // ✓ centered
         ctx.save()
         ctx.globalAlpha = 0.9
+        ctx.translate(w * 0.5, h * 0.82)
+        ctx.scale(-1, 1)
         ctx.font = `bold ${Math.max(18, w * 0.06)}px sans-serif`
         ctx.textAlign = 'center'
+        ctx.textBaseline = 'middle'
         ctx.fillStyle = '#4ade80'
         ctx.shadowBlur = 20
         ctx.shadowColor = '#22c55e'
-        ctx.fillText('✓', w * 0.5, h * 0.82)
+        ctx.fillText('✓', 0, 0)
         ctx.restore()
       } else {
-        // Pulsing cyan/purple
-        const alpha = 0.55 + pulse * 0.2
         drawFigure(ctx, pose, w, h, {
           color: '#a78bfa',
           glowColor: '#7c3aed',
-          alpha,
+          alpha: 0.55 + pulse * 0.2,
           lineWidth: Math.max(3, w * 0.006),
           headRadius: Math.max(10, w * 0.024),
           dotRadius: Math.max(5, w * 0.010),
@@ -193,17 +217,16 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
         })
       }
 
-      // Gesture name label at bottom of figure
-      const labelY = h * 0.77
-      ctx.save()
-      ctx.globalAlpha = detected ? 0.95 : 0.7 + pulse * 0.2
-      ctx.font = `bold ${Math.max(14, w * 0.038)}px sans-serif`
-      ctx.textAlign = 'center'
-      ctx.fillStyle = detected ? '#4ade80' : '#c4b5fd'
-      ctx.shadowBlur = 12
-      ctx.shadowColor = detected ? '#22c55e' : '#7c3aed'
-      ctx.fillText(def?.name ?? gestureId, w * 0.5, labelY)
-      ctx.restore()
+      // Gesture name label
+      drawMirroredText(
+        ctx,
+        def?.name ?? gestureId,
+        w * 0.5,
+        h * 0.77,
+        `bold ${Math.max(14, w * 0.038)}px sans-serif`,
+        detected ? '#4ade80' : '#c4b5fd',
+        detected ? '#22c55e' : '#7c3aed',
+      )
 
       animRef.current = requestAnimationFrame(render)
     }
@@ -212,7 +235,6 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
     return () => cancelAnimationFrame(animRef.current)
   }, [gestureId, nextGestureId, detected])
 
-  // Keep canvas sized to its container
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -229,7 +251,8 @@ export function GestureOverlay({ gestureId, nextGestureId, detected, className =
   return (
     <canvas
       ref={canvasRef}
-      className={`absolute inset-0 w-full h-full pointer-events-none ${className}`}
+      // CSS mirror matches the camera video - pose coords are in image space
+      className={`absolute inset-0 w-full h-full pointer-events-none scale-x-[-1] ${className}`}
     />
   )
 }
