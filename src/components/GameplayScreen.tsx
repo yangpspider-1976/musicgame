@@ -5,7 +5,7 @@ import { poseDetector } from '../features/pose/poseDetector'
 import { PoseDetector } from '../features/pose/poseDetector'
 import { buildSession } from '../features/gameplay/scoring'
 import { GameplayHUD } from './GameplayHUD'
-import { GesturePromptView } from './GesturePromptView'
+import { GestureOverlay } from './GestureOverlay'
 import { evaluateGesture } from '../features/gestures/evaluateGesture'
 import type { PoseFrame } from '../types'
 
@@ -160,8 +160,16 @@ export function GameplayScreen() {
         </div>
       )}
 
+      {/* Gesture silhouette overlay — on top of camera, below HUD */}
+      <GestureOverlay
+        gestureId={gameState.activePrompt?.gestureId ?? null}
+        nextGestureId={gameState.nextPrompt?.gestureId ?? null}
+        detected={currentDetected}
+        className="z-10"
+      />
+
       {/* HUD - top */}
-      <div className="relative z-10 p-4 pt-safe">
+      <div className="relative z-20 p-4 pt-safe">
         <GameplayHUD
           score={gameState.score}
           combo={gameState.combo}
@@ -176,16 +184,6 @@ export function GameplayScreen() {
 
       {/* Spacer */}
       <div className="flex-1" />
-
-      {/* Gesture prompt - bottom */}
-      <div className="relative z-10 p-4 pb-safe">
-        <GesturePromptView
-          currentPrompt={gameState.activePrompt}
-          nextPrompt={gameState.nextPrompt}
-          currentTime={gameState.currentTime}
-          detected={currentDetected}
-        />
-      </div>
 
       {/* Stop button */}
       <button
