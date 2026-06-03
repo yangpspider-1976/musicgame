@@ -19,7 +19,7 @@ export type GamePhase = 'idle' | 'countdown' | 'playing' | 'finished'
 
 export interface GameState {
   phase: GamePhase
-  currentTime: number         // seconds into the segment
+  currentTime: number
   currentPromptIndex: number
   activePrompt: GesturePrompt | null
   nextPrompt: GesturePrompt | null
@@ -29,7 +29,8 @@ export interface GameState {
   maxCombo: number
   lastTimingGrade: TimingGrade | null
   lastGestureId: GestureId | null
-  countdown: number           // 3..0
+  countdown: number
+  audioError: string | null
 }
 
 export type GameStateListener = (state: GameState) => void
@@ -42,6 +43,8 @@ export class GameEngine {
   private startWallTime: number | null = null
   private segmentStartSec = 0
   private musicController: PlayableMusicController | null = null
+  private evaluatedPrompts = new Set<string>()
+  private frameHistory: PoseFrame[] = []
 
   private state: GameState = {
     phase: 'idle',
@@ -56,11 +59,8 @@ export class GameEngine {
     lastTimingGrade: null,
     lastGestureId: null,
     countdown: 3,
+    audioError: null,
   }
-
-  // Tracking which prompts have been evaluated
-  private evaluatedPrompts = new Set<string>()
-  private frameHistory: PoseFrame[] = []
 
   subscribe(listener: GameStateListener): () => void {
     this.listeners.push(listener)
@@ -101,12 +101,18 @@ export class GameEngine {
       lastTimingGrade: null,
       lastGestureId: null,
       countdown: 3,
+      audioError: null,
     }
     this.emit()
   }
 
+  /**
+   * Called from UI AFTER music has already started playing.
+   * Runs the visual countdown then begins the game loop.
+   */
   async startCountdown(): Promise<void> {
     this.state.phase = 'countdown'
+    this.state.audioError = null
     this.state.countdown = 3
     this.emit()
 
@@ -117,7 +123,7 @@ export class GameEngine {
     }
     this.state.countdown = 0
     this.emit()
-    await sleep(300)
+    await sleep(200)
     this.startPlaying()
   }
 
@@ -126,16 +132,6 @@ export class GameEngine {
     this.state.phase = 'playing'
     this.startWallTime = performance.now()
     this.emit()
-
-    // Start music via controller if available
-    if (this.musicController && this.musicController.isReady()) {
-      this.musicController.seekTo(this.segmentStartSec)
-      const playPromise = this.musicController.play()
-      if (playPromise instanceof Promise) {
-        playPromise.catch((e) => console.warn('musicController play failed:', e))
-      }
-    }
-
     this.tick()
   }
 
@@ -144,12 +140,11 @@ export class GameEngine {
 
     let currentTime: number
     if (this.musicController && this.musicController.isReady()) {
-      // Use music time as source of truth
+      // Primary: use actual music playback time
       currentTime = this.musicController.getCurrentTime() + this.syncSettings.offsetMs / 1000
     } else {
-      // Fallback to wall clock
-      const now = performance.now()
-      const elapsed = (now - (this.startWallTime ?? now)) / 1000
+      // Fallback: wall clock (no music controller)
+      const elapsed = (performance.now() - (this.startWallTime ?? performance.now())) / 1000
       currentTime = this.segmentStartSec + elapsed + this.syncSettings.offsetMs / 1000
     }
 
@@ -158,12 +153,11 @@ export class GameEngine {
     const prompts = this.challenge?.prompts ?? []
     const segEnd = this.challenge?.segmentEnd ?? Infinity
 
-    // Advance prompt index
+    // Advance past expired prompts
     while (
       this.state.currentPromptIndex < prompts.length - 1 &&
       prompts[this.state.currentPromptIndex].endTime < currentTime
     ) {
-      // Mark as miss if not evaluated
       const prompt = prompts[this.state.currentPromptIndex]
       if (!this.evaluatedPrompts.has(prompt.id)) {
         this.recordResult(prompt, 'MISS', 0, 0)
@@ -184,7 +178,6 @@ export class GameEngine {
 
     this.state.nextPrompt = nextPrompt ?? null
 
-    // Check if game is over
     if (currentTime >= segEnd || activeIdx >= prompts.length) {
       this.finish()
       return
@@ -194,9 +187,6 @@ export class GameEngine {
     this.animFrameId = requestAnimationFrame(() => this.tick())
   }
 
-  /**
-   * Feed a pose frame to the engine for gesture evaluation.
-   */
   feedPoseFrame(frame: PoseFrame): void {
     this.frameHistory.push(frame)
     if (this.frameHistory.length > 60) this.frameHistory.shift()
@@ -236,16 +226,14 @@ export class GameEngine {
     const score = calculateGestureScore(timingGrade, accuracy, this.state.combo)
     this.state.score += score
 
-    const gestureResult: GestureResult = {
+    this.state.results.push({
       promptId: prompt.id,
       gestureId: prompt.gestureId,
       timingGrade,
       timingOffsetMs: offsetMs,
       poseAccuracy: accuracy,
       score,
-    }
-
-    this.state.results.push(gestureResult)
+    })
     this.state.lastTimingGrade = timingGrade
     this.state.lastGestureId = prompt.gestureId
     this.emit()
