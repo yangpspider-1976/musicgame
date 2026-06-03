@@ -23,6 +23,11 @@ export function CameraPreview({
   const [status, setStatus] = useState<'idle' | 'requesting' | 'active' | 'error'>('idle')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
 
+  const onReadyRef = useRef(onReady)
+  const onPoseFrameRef = useRef(onPoseFrame)
+  useEffect(() => { onReadyRef.current = onReady }, [onReady])
+  useEffect(() => { onPoseFrameRef.current = onPoseFrame }, [onPoseFrame])
+
   useEffect(() => {
     let cancelled = false
     const detector = new PoseDetector()
@@ -33,19 +38,39 @@ export function CameraPreview({
       const video = videoRef.current
       if (!video) return
 
+      // First get camera stream so video shows up immediately
+      let stream: MediaStream | null = null
       try {
-        // Try MediaPipe first
-        await detector.initialize()
-        await detector.startCamera(video, (frame) => {
-          if (cancelled) return
-          onPoseFrame?.(frame)
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user', width: 640, height: 480 },
+          audio: false,
+        })
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
+        video.srcObject = stream
+        await video.play()
+        if (!cancelled) {
+          setStatus('active')
+          onReadyRef.current?.(stream)
+        }
+      } catch (camErr) {
+        if (!cancelled) {
+          setErrorMsg(camErr instanceof Error ? camErr.message : 'Camera access denied')
+          setStatus('error')
+        }
+        return
+      }
 
-          // Draw skeleton on canvas
+      // Then try to layer MediaPipe pose detection on top
+      try {
+        await detector.initialize()
+        if (cancelled) return
+        detector.onFrame((frame) => {
+          if (cancelled) return
+          onPoseFrameRef.current?.(frame)
           if (showSkeleton && canvasRef.current) {
             const canvas = canvasRef.current
             const ctx = canvas.getContext('2d')
             if (ctx) {
-              // Match canvas to video size
               canvas.width = video.videoWidth || 640
               canvas.height = video.videoHeight || 480
               ctx.clearRect(0, 0, canvas.width, canvas.height)
@@ -53,30 +78,18 @@ export function CameraPreview({
             }
           }
         })
-        if (!cancelled) {
-          setStatus('active')
-          if (video.srcObject instanceof MediaStream) {
-            onReady?.(video.srcObject)
+        // Feed video frames to MediaPipe manually
+        const loop = async () => {
+          if (cancelled) return
+          if (video.readyState >= 2) {
+            await detector['pose']?.send({ image: video }).catch(() => {})
           }
+          requestAnimationFrame(loop)
         }
+        detector['isRunning'] = true
+        requestAnimationFrame(loop)
       } catch (_poseErr) {
-        // Fallback: just get camera without pose
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: 640, height: 480 },
-          })
-          if (!cancelled) {
-            video.srcObject = stream
-            await video.play()
-            setStatus('active')
-            onReady?.(stream)
-          }
-        } catch (camErr) {
-          if (!cancelled) {
-            setErrorMsg(camErr instanceof Error ? camErr.message : 'Camera access denied')
-            setStatus('error')
-          }
-        }
+        // Pose detection unavailable; camera-only mode is fine
       }
     }
 
@@ -85,8 +98,9 @@ export function CameraPreview({
     return () => {
       cancelled = true
       detector.stop()
+      detectorRef.current = null
     }
-  }, [onReady, onPoseFrame, showSkeleton])
+  }, [showSkeleton])
 
   return (
     <div className={`relative overflow-hidden rounded-2xl bg-dark-800 ${className}`}>
