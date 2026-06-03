@@ -416,8 +416,8 @@ export function GameplayScreen() {
           style={{
             zIndex: 35,
             ...(showTapOverlay
-              ? { bottom: 204, left: 16, right: 16, height: 176 }  // big, in overlay
-              : { bottom: 80, right: 16, width: 112, height: 64, opacity: 0.7 }), // small corner
+              ? { top: 56, right: 16, width: 160, height: 90 }    // small, top-right in overlay
+              : { top: 56, right: 16, width: 128, height: 72, opacity: 0.75 }), // small top-right during gameplay
           }}
         />
       )}
@@ -455,12 +455,9 @@ export function GameplayScreen() {
                 </p>
               </div>
 
-              {/* Spacer that aligns with the YT player rendered above */}
-              {isYouTubeChallenge && <div style={{ height: 176, width: '100%' }} />}
-
               {isYouTubeChallenge && startState === 'waiting' && (
                 <p className="text-slate-500 text-xs text-center leading-relaxed">
-                  Tap the player above to preview, then tap START.
+                  YouTube player is loading in the top-right corner.
                 </p>
               )}
 
