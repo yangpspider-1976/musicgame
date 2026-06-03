@@ -42,7 +42,7 @@ export function CameraPreview({
       let stream: MediaStream | null = null
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: 640, height: 480 },
+          video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } },
           audio: false,
         })
         if (cancelled) { stream.getTracks().forEach(t => t.stop()); return }
@@ -120,7 +120,7 @@ export function CameraPreview({
 
       <video
         ref={videoRef}
-        className={`w-full h-full object-cover ${mirrored ? 'scale-x-[-1]' : ''}`}
+        className={`w-full h-full object-contain bg-black ${mirrored ? 'scale-x-[-1]' : ''}`}
         playsInline
         muted
         autoPlay

@@ -78,7 +78,12 @@ export function GameplayScreen() {
         // Fallback without pose
         try {
           const stream = await navigator.mediaDevices.getUserMedia({
-            video: { facingMode: 'user', width: 640, height: 480 },
+            video: {
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              aspectRatio: { ideal: 16 / 9 },
+            },
           })
           if (video) {
             video.srcObject = stream
@@ -132,7 +137,7 @@ export function GameplayScreen() {
       <div className="absolute inset-0">
         <video
           ref={videoRef}
-          className="w-full h-full object-cover scale-x-[-1]"
+          className="w-full h-full object-contain scale-x-[-1] bg-black"
           playsInline
           muted
           autoPlay

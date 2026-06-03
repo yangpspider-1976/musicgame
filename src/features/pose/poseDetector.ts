@@ -152,8 +152,8 @@ export class PoseDetector {
           await this.pose.send({ image: videoElement })
         }
       },
-      width: 640,
-      height: 480,
+      width: 1280,
+      height: 720,
       facingMode: 'user',
     })
 
@@ -164,7 +164,7 @@ export class PoseDetector {
   private async startManualCamera(videoElement: HTMLVideoElement): Promise<void> {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'user', width: 640, height: 480 },
+        video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, aspectRatio: { ideal: 16 / 9 } },
       })
       videoElement.srcObject = stream
       await videoElement.play()
